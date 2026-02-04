@@ -1,7 +1,9 @@
 # Fanta-Analyst Trade Analyzer
 
 ## English
-Public full-stack trade analyzer for Fantacalcio players. The backend scrapes match stats and scores players; the frontend compares two trade sides and renders verdicts and charts. The UI is **in Italian** because it targets Italian Fantacalcio users. Player URLs must be **fantacalcio.it season player pages**.
+This project is built for Fantacalcio managers who want a quick, visual way to evaluate trades. You paste player season URLs from fantacalcio.it, set roles, and get a clean season-long verdict with charts and player-level context. The UI is **in Italian** because it targets Italian Fantacalcio users. Player URLs must be **fantacalcio.it season player pages**.
+
+If you are a recruiter or hiring manager, this repo also highlights practical full-stack work: scraping, data modeling, scoring logic, and a polished React + FastAPI UI.
 
 Example URL:
 `https://www.fantacalcio.it/serie-a/squadre/sassuolo/pinamonti/2038/2025-26`
@@ -95,7 +97,9 @@ SOFTWARE.
 ---
 
 ## Italiano
-Analizzatore di scambi Fantacalcio full-stack in formato pubblico. Il backend esegue lo scraping dei voti e calcola gli score; il frontend confronta due lati dello scambio e mostra verdetti e grafici. L'interfaccia è **in italiano** perché l'app è pensata per utenti Fantacalcio in Italia. Gli URL dei giocatori devono essere **pagine stagione di fantacalcio.it**.
+Questo progetto è pensato per chi gioca al Fantacalcio e vuole valutare rapidamente gli scambi. Inserisci gli URL stagione dei giocatori da fantacalcio.it, imposta i ruoli e ottieni un verdetto stagionale con grafici e dettagli per giocatore. L'interfaccia è **in italiano** perché l'app è pensata per utenti Fantacalcio in Italia. Gli URL dei giocatori devono essere **pagine stagione di fantacalcio.it**.
+
+Per chi valuta il profilo come recruiter, questa repo mostra lavoro concreto full-stack: scraping, modellazione dati, scoring e una UI React + FastAPI curata.
 
 URL di esempio:
 `https://www.fantacalcio.it/serie-a/squadre/sassuolo/pinamonti/2038/2025-26`
