@@ -42,6 +42,7 @@ export default function TradeTotalsChart({
     hovertemplate: "%{y:.1f}<extra>%{fullData.name}</extra>"
   }));
 
+  // Stack player values to show each side's total composition.
   const data = [...leftTraces, ...rightTraces];
 
   return (

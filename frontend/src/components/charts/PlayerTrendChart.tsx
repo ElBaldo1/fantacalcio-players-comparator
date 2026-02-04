@@ -10,6 +10,7 @@ type TrendProps = {
   yTitle: string;
 };
 
+// Build per-matchday averages for a side, skipping missing values.
 const buildAverageMap = (players: PlayerMetrics[], metric: "fv" | "voto") => {
   const map = new Map<number, { sum: number; count: number }>();
   players.forEach((player) => {
