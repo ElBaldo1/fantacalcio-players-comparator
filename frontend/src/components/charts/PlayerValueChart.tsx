@@ -29,7 +29,7 @@ export default function PlayerValueChart({
       ]}
       layout={{
         title,
-        margin: { t: 40, l: 50, r: 20, b: 120 },
+        margin: { t: 20, l: 50, r: 20, b: 120 },
         xaxis: { tickangle: -30, title: "Giocatore" },
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
@@ -40,6 +40,7 @@ export default function PlayerValueChart({
           tick0: 0
         }
       }}
+      config={{ displayModeBar: false }}
       style={{ width: "100%", height: "100%" }}
       useResizeHandler
     />

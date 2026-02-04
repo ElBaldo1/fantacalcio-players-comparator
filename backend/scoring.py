@@ -286,8 +286,8 @@ def build_player_payload(name: str, df: pd.DataFrame, role: str) -> Dict[str, An
     )
 
     series = (
-        df[["giornata", "fv"]]
-        .dropna()
+        df[["giornata", "fv", "voto"]]
+        .dropna(subset=["giornata"])
         .sort_values("giornata")
         .to_dict(orient="records")
     )

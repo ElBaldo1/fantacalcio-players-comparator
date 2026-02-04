@@ -16,15 +16,15 @@ body {
 }
 
 .card {
-  @apply rounded-2xl border border-slate-200 bg-white shadow-md;
+  @apply rounded-2xl border border-slate-200 bg-white shadow-lg;
 }
 
 .table-cell {
-  @apply px-3 py-2 text-sm text-slate-700;
+  @apply px-3 py-3 text-sm text-slate-700 md:text-base;
 }
 
 .table-head {
-  @apply px-3 py-2 text-xs uppercase tracking-widest text-slate-400;
+  @apply px-3 py-3 text-sm uppercase tracking-widest text-slate-400;
 }
 
 .badge-left {
@@ -36,19 +36,19 @@ body {
 }
 
 .button-primary {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 font-semibold text-white hover:bg-emerald-600;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-base font-semibold text-white hover:bg-emerald-600;
 }
 
 .button-secondary {
-  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-100;
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-base text-slate-700 hover:bg-slate-100;
 }
 
 .input {
-  @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900;
+  @apply w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900;
 }
 
 .select {
-  @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900;
+  @apply w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900;
 }
 
 .alert {

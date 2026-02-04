@@ -17,6 +17,16 @@ const countRoles = (players: PlayerInput[]) => {
   return counts;
 };
 
+const roleLabels: Record<PlayerInput["role"], string> = {
+  GK: "Portiere",
+  DEF: "Difensore",
+  MID: "Centrocampista",
+  FWD: "Attaccante"
+};
+
+const formatRoleCounts = (counts: Record<PlayerInput["role"], number>) =>
+  `Portiere ${counts.GK}, Difensore ${counts.DEF}, Centrocampista ${counts.MID}, Attaccante ${counts.FWD}`;
+
 export default function App() {
   const [left, setLeft] = useState<PlayerInput[]>([emptyPlayer()]);
   const [right, setRight] = useState<PlayerInput[]>([emptyPlayer()]);
@@ -27,16 +37,22 @@ export default function App() {
   const validations = useMemo(() => {
     const errs: string[] = [];
     if (left.length !== right.length) {
-      errs.push(`Numero giocatori diverso. Sinistra ${left.length}, Destra ${right.length}.`);
+      errs.push(
+        `Serve lo stesso numero di giocatori per lato. Ora: sinistra ${left.length}, destra ${right.length}.`
+      );
     }
     const leftCounts = countRoles(left);
     const rightCounts = countRoles(right);
     if (JSON.stringify(leftCounts) !== JSON.stringify(rightCounts)) {
-      errs.push(`Ruoli non equivalenti. Sinistra ${JSON.stringify(leftCounts)}, Destra ${JSON.stringify(rightCounts)}.`);
+      errs.push(
+        `I ruoli devono essere identici tra i due lati. ` +
+          `Sinistra: ${formatRoleCounts(leftCounts)}. ` +
+          `Destra: ${formatRoleCounts(rightCounts)}.`
+      );
     }
     const missingUrls = [...left, ...right].some((p) => !p.url.trim());
     if (missingUrls) {
-      errs.push("Inserisci l'URL per ogni giocatore.");
+      errs.push("Manca almeno un URL: inserisci il link per ogni giocatore.");
     }
     return errs;
   }, [left, right]);
@@ -79,8 +95,18 @@ export default function App() {
         body: JSON.stringify({ left, right })
       });
       if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message || "Impossibile valutare lo scambio.");
+        let message = "Impossibile valutare lo scambio.";
+        const contentType = response.headers.get("content-type") ?? "";
+        if (contentType.includes("application/json")) {
+          const payload = await response.json();
+          if (payload?.detail) {
+            message = payload.detail;
+          }
+        } else {
+          const text = await response.text();
+          if (text) message = text;
+        }
+        throw new Error(message);
       }
       const payload = (await response.json()) as TradeResponse;
       setResults(payload);

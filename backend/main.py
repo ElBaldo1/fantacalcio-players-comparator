@@ -29,6 +29,7 @@ app.add_middleware(
 )
 
 CACHE: Dict[str, tuple] = {}
+ROLE_LABELS = {"GK": "Portiere", "DEF": "Difensore", "MID": "Centrocampista", "FWD": "Attaccante"}
 
 
 def role_counts(players: List[PlayerInput]) -> Dict[str, int]:
@@ -39,18 +40,29 @@ def role_counts(players: List[PlayerInput]) -> Dict[str, int]:
     return counts
 
 
+def format_role_counts(counts: Dict[str, int]) -> str:
+    return ", ".join(f"{ROLE_LABELS[key]} {counts[key]}" for key in ["GK", "DEF", "MID", "FWD"])
+
+
 def validate_trade(left: List[PlayerInput], right: List[PlayerInput]) -> None:
     if len(left) != len(right):
         raise HTTPException(
             status_code=422,
-            detail=f"Player count mismatch: Left={len(left)}, Right={len(right)}",
+            detail=(
+                "Per valutare lo scambio servono lo stesso numero di giocatori per lato. "
+                f"Sinistra={len(left)}, Destra={len(right)}."
+            ),
         )
     left_counts = role_counts(left)
     right_counts = role_counts(right)
     if left_counts != right_counts:
         raise HTTPException(
             status_code=422,
-            detail=f"Role counts mismatch. Left: {left_counts} | Right: {right_counts}",
+            detail=(
+                "I ruoli devono coincidere tra i due lati. "
+                f"Sinistra: {format_role_counts(left_counts)}. "
+                f"Destra: {format_role_counts(right_counts)}."
+            ),
         )
 
 
@@ -76,12 +88,16 @@ def driver_contributions(left: list, right: list, value_key: str) -> List[Dict[s
         baseline = left_role_avgs.get(p["role"])
         if baseline is None:
             continue
-        contributions.append({"player": f"{p['name']} (Right)", "delta": p[value_key] - baseline})
+        contributions.append(
+            {"player": f"{p['name']} (Destra)", "delta": p[value_key] - baseline}
+        )
     for p in left:
         baseline = right_role_avgs.get(p["role"])
         if baseline is None:
             continue
-        contributions.append({"player": f"{p['name']} (Left)", "delta": p[value_key] - baseline})
+        contributions.append(
+            {"player": f"{p['name']} (Sinistra)", "delta": p[value_key] - baseline}
+        )
 
     contributions.sort(key=lambda x: abs(x["delta"]), reverse=True)
     return contributions[:3]
@@ -116,10 +132,18 @@ async def evaluate_trade(payload: TradeRequest) -> Dict[str, object]:
 
     threshold = 5.0
     season_verdict = (
-        "Right side wins" if delta_season > threshold else "Left side wins" if delta_season < -threshold else "Roughly balanced"
+        "Vince il lato destro"
+        if delta_season > threshold
+        else "Vince il lato sinistro"
+        if delta_season < -threshold
+        else "Scambio equilibrato"
     )
     next3_verdict = (
-        "Right side wins" if delta_next3 > threshold else "Left side wins" if delta_next3 < -threshold else "Roughly balanced"
+        "Vince il lato destro"
+        if delta_next3 > threshold
+        else "Vince il lato sinistro"
+        if delta_next3 < -threshold
+        else "Scambio equilibrato"
     )
 
     return {

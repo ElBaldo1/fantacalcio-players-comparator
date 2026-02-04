@@ -5,7 +5,8 @@ export type PlayerInput = {
 
 export type PlayerSeriesPoint = {
   giornata: number;
-  fv: number;
+  fv: number | null;
+  voto: number | null;
 };
 
 export type PlayerMetrics = {

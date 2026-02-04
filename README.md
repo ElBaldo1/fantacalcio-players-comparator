@@ -66,7 +66,7 @@ Valid trades require **the same number of players** on both sides and **the same
 ### Notes
 - Charts use fixed y-axis tick intervals (0.5 for FV-related charts and 10 for 0-100 scores).
 - Backend validates trade constraints (same number of players and role counts).
-- Trade value uses season and next-3 horizons with explicit formulas.
+- The UI focuses on season-long value for the trade verdict.
 
 ---
 
@@ -107,4 +107,4 @@ Lo scambio è valido solo se **il numero di giocatori è uguale** tra i due lati
 ### Note
 - I grafici usano intervalli fissi sull'asse Y (0.5 per FV e 10 per gli score 0-100).
 - Il backend valida la correttezza dello scambio (numero giocatori e ruoli).
-- Il valore dello scambio usa orizzonte stagione e prossime 3 giornate.
+- L'interfaccia mostra il valore stagione per il verdetto dello scambio.

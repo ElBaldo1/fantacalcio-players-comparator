@@ -1,8 +1,7 @@
-import { ArrowLeft, ChartLine } from "lucide-react";
+import { ArrowLeft, ChartLine, Eye, EyeOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { TradeResponse } from "../types";
 import TradeTotalsChart from "./charts/TradeTotalsChart";
-import PlayerValueChart from "./charts/PlayerValueChart";
 import PlayerTrendChart from "./charts/PlayerTrendChart";
 
 const roleLabels: Record<string, string> = {
@@ -12,60 +11,64 @@ const roleLabels: Record<string, string> = {
   FWD: "Attaccante"
 };
 
-function Table({ players }: { players: TradeResponse["left"] }) {
+function Table({ players, side }: { players: TradeResponse["left"]; side: "left" | "right" }) {
+  const headers = [
+    { label: "Giocatore", className: "whitespace-nowrap" },
+    { label: "Ruolo", className: "whitespace-nowrap" },
+    { label: "Punteggio", className: "whitespace-nowrap" },
+    { label: "Valore Stagione", className: "whitespace-nowrap" },
+    { label: "Voto medio", className: "whitespace-nowrap" },
+    { label: "FV medio", className: "whitespace-nowrap" },
+    { label: "Copertura (%)", className: "whitespace-nowrap" },
+    { label: "Std FV", className: "whitespace-nowrap" }
+  ];
+  const badgeClass = side === "left" ? "badge-left" : "badge-right";
+  const badgeLabel = side === "left" ? "Sinistra" : "Destra";
   return (
     <div className="card overflow-hidden">
-      <table className="w-full">
-        <thead>
-          <tr className="bg-slate-100 text-left">
-            {[
-              "Giocatore",
-              "Ruolo",
-              "Punteggio",
-              "Valore Stagione",
-              "Valore Prossime 3",
-              "FV Previsto",
-              "FV Previsto (3)",
-              "Affidabilità",
-              "Disponibilità",
-              "FV Medio",
-              "Std FV"
-            ].map((head) => (
-              <th key={head} className="table-head">
-                {head}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {players.map((player) => (
-            <tr key={player.name} className="border-t border-slate-200">
-              <td className="table-cell">{player.name}</td>
-              <td className="table-cell">{roleLabels[player.role] ?? player.role}</td>
-              <td className="table-cell">{player.final_score.toFixed(1)}</td>
-              <td className="table-cell">{player.season_value.toFixed(1)}</td>
-              <td className="table-cell">{player.next3_value.toFixed(1)}</td>
-              <td className="table-cell">{player.predicted_next_fv.toFixed(2)}</td>
-              <td className="table-cell">{player.predicted_next3_fv.toFixed(2)}</td>
-              <td className="table-cell">{player.matches_n >= 15 ? "Alta" : player.matches_n >= 10 ? "Media" : "Bassa"}</td>
-              <td className="table-cell">{player.availability.toFixed(2)}</td>
-              <td className="table-cell">{player.avg_fv.toFixed(2)}</td>
-              <td className="table-cell">{player.std_fv.toFixed(2)}</td>
+      <div className="overflow-x-auto">
+        <table className="min-w-[760px] w-full">
+          <thead>
+            <tr className="bg-slate-100 text-left">
+              {headers.map((head) => (
+                <th key={head.label} className={`table-head ${head.className}`}>
+                  {head.label}
+                </th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {players.map((player) => (
+              <tr key={player.name} className="border-t border-slate-200">
+                <td className="table-cell">
+                  <div className="flex items-center gap-2">
+                    <span className={badgeClass}>{badgeLabel}</span>
+                    <span>{player.name}</span>
+                  </div>
+                </td>
+                <td className="table-cell">{roleLabels[player.role] ?? player.role}</td>
+                <td className="table-cell">{player.final_score.toFixed(1)}</td>
+                <td className="table-cell">{player.season_value.toFixed(1)}</td>
+                <td className="table-cell">{player.avg_voto.toFixed(2)}</td>
+                <td className="table-cell">{player.avg_fv.toFixed(2)}</td>
+                <td className="table-cell">{(player.availability * 100).toFixed(0)}%</td>
+                <td className="table-cell">{player.std_fv.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
 function VerdictBlock({ title, data }: { title: string; data: TradeResponse["totals"]["season"] }) {
   return (
-    <div className="card p-4">
-      <h3 className="text-lg font-semibold">{title}</h3>
-      <p className="text-sm text-slate-600">{data.verdict}</p>
-      <p className="text-sm text-slate-500">Differenza: {data.delta.toFixed(1)}</p>
-      <div className="mt-2 text-xs text-slate-500">
+    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+      <h3 className="text-lg font-semibold text-emerald-900">{title}</h3>
+      <p className="text-sm text-emerald-900">{data.verdict}</p>
+      <p className="text-sm text-emerald-700">Differenza: {data.delta.toFixed(1)}</p>
+      <div className="mt-2 text-xs text-emerald-700">
         Fattori chiave: {data.drivers.map((d) => `${d.player} (${d.delta.toFixed(1)})`).join(", ") || "N/D"}
       </div>
     </div>
@@ -79,17 +82,25 @@ export default function ResultsScreen({
   data: TradeResponse;
   onBack: () => void;
 }) {
-  const allPlayers = useMemo(() => [...data.left, ...data.right], [data]);
-  const [selectedPlayer, setSelectedPlayer] = useState(allPlayers[0]?.name ?? "");
-  const selected = allPlayers.find((p) => p.name === selectedPlayer) ?? allPlayers[0];
+  const [legendOpen, setLegendOpen] = useState(true);
+  const leftLabel = useMemo(() => {
+    if (data.left.length === 1) return data.left[0].name;
+    if (data.left.length === 2) return `${data.left[0].name} + ${data.left[1].name}`;
+    return `${data.left[0].name} + ${data.left[1].name} + ${data.left.length - 2} altri`;
+  }, [data.left]);
+  const rightLabel = useMemo(() => {
+    if (data.right.length === 1) return data.right[0].name;
+    if (data.right.length === 2) return `${data.right[0].name} + ${data.right[1].name}`;
+    return `${data.right[0].name} + ${data.right[1].name} + ${data.right.length - 2} altri`;
+  }, [data.right]);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 px-4 py-5 md:px-8">
+      <header className="border-b border-slate-200 px-4 py-4 md:px-8">
         <div className="mx-auto flex max-w-screen-2xl items-center justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-emerald-600">Risultati</p>
-            <h1 className="text-3xl font-semibold">Analisi scambio</h1>
+            <h1 className="text-4xl font-semibold">Analisi scambio</h1>
           </div>
           <button type="button" className="button-secondary" onClick={onBack}>
             <ArrowLeft className="h-4 w-4" /> Indietro
@@ -97,81 +108,108 @@ export default function ResultsScreen({
         </div>
       </header>
 
-      <main className="mx-auto max-w-screen-2xl space-y-8 px-4 py-8 md:px-8">
+      <main className="mx-auto max-w-screen-2xl space-y-5 px-4 py-5 md:px-8">
         <section className="grid gap-6 lg:grid-cols-2">
           <div>
-            <h2 className="mb-3 text-lg font-semibold">Lato sinistro</h2>
-            <Table players={data.left} />
+            <h2 className="mb-3 text-xl font-semibold">{leftLabel}</h2>
+            <Table players={data.left} side="left" />
           </div>
           <div>
-            <h2 className="mb-3 text-lg font-semibold">Lato destro</h2>
-            <Table players={data.right} />
+            <h2 className="mb-3 text-xl font-semibold">{rightLabel}</h2>
+            <Table players={data.right} side="right" />
           </div>
         </section>
 
-        <section className="grid gap-6 lg:grid-cols-3">
-          <div className="card p-4">
-            <p className="text-sm text-slate-500">Totali stagione</p>
-            <p className="text-xl font-semibold">Sinistra {data.totals.season.left.toFixed(1)}</p>
-            <p className="text-xl font-semibold">Destra {data.totals.season.right.toFixed(1)}</p>
-            <p className="text-sm text-slate-500">Differenza {data.totals.season.delta.toFixed(1)}</p>
+        <section className="grid gap-5 lg:grid-cols-[2fr_1fr]">
+          <div className="card flex flex-col gap-3 p-4">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-slate-500">Valore stagione</p>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                  onClick={() => setLegendOpen((prev) => !prev)}
+                >
+                  {legendOpen ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {legendOpen ? "Nascondi legenda" : "Mostra legenda"}
+                </button>
+              </div>
+              <div className="mt-2 grid gap-4 md:grid-cols-2">
+                <div>
+                  <p className="text-sm text-slate-500">{leftLabel}</p>
+                  <p className="text-2xl font-semibold">{data.totals.season.left.toFixed(1)}</p>
+                  <p className="text-sm text-slate-500">
+                    Media voto {(
+                      data.left.reduce((acc, p) => acc + p.avg_voto, 0) / data.left.length
+                    ).toFixed(2)}{" "}
+                    · Media FV {(
+                      data.left.reduce((acc, p) => acc + p.avg_fv, 0) / data.left.length
+                    ).toFixed(2)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">{rightLabel}</p>
+                  <p className="text-2xl font-semibold">{data.totals.season.right.toFixed(1)}</p>
+                  <p className="text-sm text-slate-500">
+                    Media voto {(
+                      data.right.reduce((acc, p) => acc + p.avg_voto, 0) / data.right.length
+                    ).toFixed(2)}{" "}
+                    · Media FV {(
+                      data.right.reduce((acc, p) => acc + p.avg_fv, 0) / data.right.length
+                    ).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-2 text-sm text-slate-500">
+                Differenza {data.totals.season.delta.toFixed(1)}
+              </p>
+            </div>
+            <div className="flex-1 min-h-[220px]">
+              <TradeTotalsChart
+                left={data.left}
+                right={data.right}
+                leftLabel={leftLabel}
+                rightLabel={rightLabel}
+                showLegend={legendOpen}
+              />
+            </div>
           </div>
-          <div className="card p-4">
-            <p className="text-sm text-slate-500">Totali prossime 3</p>
-            <p className="text-xl font-semibold">Sinistra {data.totals.next3.left.toFixed(1)}</p>
-            <p className="text-xl font-semibold">Destra {data.totals.next3.right.toFixed(1)}</p>
-            <p className="text-sm text-slate-500">Differenza {data.totals.next3.delta.toFixed(1)}</p>
-          </div>
-          <div className="card p-4">
-            <p className="text-sm text-slate-500">Sintesi</p>
-            <p className="text-sm">Verdetto stagione: {data.totals.season.verdict}</p>
-            <p className="text-sm">Verdetto prossime 3: {data.totals.next3.verdict}</p>
-          </div>
+          <VerdictBlock title="Verdetto stagione" data={data.totals.season} />
         </section>
 
         <section className="grid gap-6 lg:grid-cols-2">
-          <div className="card p-4 h-[360px]">
-            <TradeTotalsChart totals={data.totals} />
-          </div>
-          <div className="card p-4 h-[360px]">
-            <PlayerValueChart
-              left={data.left}
-              right={data.right}
-              valueKey="season_value"
-              title="Valore stagione per giocatore"
-            />
-          </div>
-          <div className="card p-4 h-[360px]">
-            <PlayerValueChart
-              left={data.left}
-              right={data.right}
-              valueKey="next3_value"
-              title="Valore prossime 3 per giocatore"
-            />
-          </div>
-          <div className="card p-4 h-[360px]">
+          <div className="card flex h-[320px] flex-col p-4">
             <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
               <ChartLine className="h-4 w-4 text-emerald-600" />
-              Andamento FV
+              Andamento FV (media per lato)
             </div>
-            <select
-              className="select mb-3"
-              value={selectedPlayer}
-              onChange={(event) => setSelectedPlayer(event.target.value)}
-            >
-              {allPlayers.map((player) => (
-                <option key={player.name} value={player.name}>
-                  {player.name}
-                </option>
-              ))}
-            </select>
-            {selected && <PlayerTrendChart player={selected} />}
+            <div className="flex-1 min-h-0">
+              <PlayerTrendChart
+                left={data.left}
+                right={data.right}
+                leftLabel={leftLabel}
+                rightLabel={rightLabel}
+                metric="fv"
+                yTitle="Fantavoto (FV)"
+              />
+            </div>
           </div>
-        </section>
-
-        <section className="grid gap-4 lg:grid-cols-2">
-          <VerdictBlock title="Verdetto breve periodo (Prossime 3)" data={data.totals.next3} />
-          <VerdictBlock title="Verdetto lungo periodo (Stagione)" data={data.totals.season} />
+          <div className="card flex h-[320px] flex-col p-4">
+            <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
+              <ChartLine className="h-4 w-4 text-emerald-600" />
+              Andamento Voto (media per lato)
+            </div>
+            <div className="flex-1 min-h-0">
+              <PlayerTrendChart
+                left={data.left}
+                right={data.right}
+                leftLabel={leftLabel}
+                rightLabel={rightLabel}
+                metric="voto"
+                yTitle="Voto"
+              />
+            </div>
+          </div>
         </section>
       </main>
     </div>
