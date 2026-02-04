@@ -27,16 +27,16 @@ export default function App() {
   const validations = useMemo(() => {
     const errs: string[] = [];
     if (left.length !== right.length) {
-      errs.push(`Player count mismatch. Left ${left.length}, Right ${right.length}.`);
+      errs.push(`Numero giocatori diverso. Sinistra ${left.length}, Destra ${right.length}.`);
     }
     const leftCounts = countRoles(left);
     const rightCounts = countRoles(right);
     if (JSON.stringify(leftCounts) !== JSON.stringify(rightCounts)) {
-      errs.push(`Role counts mismatch. Left ${JSON.stringify(leftCounts)}, Right ${JSON.stringify(rightCounts)}.`);
+      errs.push(`Ruoli non equivalenti. Sinistra ${JSON.stringify(leftCounts)}, Destra ${JSON.stringify(rightCounts)}.`);
     }
     const missingUrls = [...left, ...right].some((p) => !p.url.trim());
     if (missingUrls) {
-      errs.push("All players must have a URL.");
+      errs.push("Inserisci l'URL per ogni giocatore.");
     }
     return errs;
   }, [left, right]);
@@ -80,12 +80,12 @@ export default function App() {
       });
       if (!response.ok) {
         const message = await response.text();
-        throw new Error(message || "Failed to evaluate trade.");
+        throw new Error(message || "Impossibile valutare lo scambio.");
       }
       const payload = (await response.json()) as TradeResponse;
       setResults(payload);
     } catch (error) {
-      setErrors([error instanceof Error ? error.message : "Unexpected error"]);
+      setErrors([error instanceof Error ? error.message : "Errore imprevisto"]);
     } finally {
       setLoading(false);
     }

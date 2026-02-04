@@ -17,11 +17,13 @@ export default function PlayerTrendChart({ player }: { player: PlayerMetrics }) 
         }
       ]}
       layout={{
-        title: `FV Trend - ${player.name}`,
+        title: `Andamento FV - ${player.name}`,
         margin: { t: 40, l: 50, r: 20, b: 40 },
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
+        xaxis: { title: "Giornata" },
         yaxis: {
+          title: "Fantavoto (FV)",
           tickmode: "linear",
           dtick: 0.5,
           tick0: 0

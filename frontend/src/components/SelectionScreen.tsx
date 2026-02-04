@@ -1,7 +1,12 @@
-import { ArrowRightLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowRightLeft, Plus, Shield, Trash2 } from "lucide-react";
 import type { PlayerInput } from "../types";
 
-const roles = ["GK", "DEF", "MID", "FWD"] as const;
+const roles = [
+  { value: "GK", label: "Portiere" },
+  { value: "DEF", label: "Difensore" },
+  { value: "MID", label: "Centrocampista" },
+  { value: "FWD", label: "Attaccante" }
+] as const;
 
 type SideProps = {
   label: string;
@@ -24,7 +29,7 @@ function SidePanel({ label, side, players, onAdd, onRemove, onChange }: SideProp
           <div key={`${side}-${index}`} className="rounded-xl border border-slate-800 p-3">
             <div className="grid gap-3 md:grid-cols-5">
               <div className="md:col-span-3">
-                <label className="text-xs uppercase text-slate-400">Player URL</label>
+                <label className="text-xs uppercase text-slate-500">URL giocatore</label>
                 <input
                   className="input mt-1"
                   value={player.url}
@@ -35,7 +40,7 @@ function SidePanel({ label, side, players, onAdd, onRemove, onChange }: SideProp
                 />
               </div>
               <div>
-                <label className="text-xs uppercase text-slate-400">Role</label>
+                <label className="text-xs uppercase text-slate-500">Ruolo</label>
                 <select
                   className="select mt-1"
                   value={player.role}
@@ -47,8 +52,8 @@ function SidePanel({ label, side, players, onAdd, onRemove, onChange }: SideProp
                   }
                 >
                   {roles.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
+                    <option key={role.value} value={role.value}>
+                      {role.label}
                     </option>
                   ))}
                 </select>
@@ -59,7 +64,7 @@ function SidePanel({ label, side, players, onAdd, onRemove, onChange }: SideProp
                   className="button-secondary w-full"
                   onClick={() => onRemove(side, index)}
                 >
-                  <Trash2 className="h-4 w-4" /> Remove
+                  <Trash2 className="h-4 w-4" /> Rimuovi
                 </button>
               </div>
             </div>
@@ -71,7 +76,7 @@ function SidePanel({ label, side, players, onAdd, onRemove, onChange }: SideProp
         className="button-secondary mt-4 w-full"
         onClick={() => onAdd(side)}
       >
-        <Plus className="h-4 w-4" /> Add player
+        <Plus className="h-4 w-4" /> Aggiungi giocatore
       </button>
     </div>
   );
@@ -99,16 +104,17 @@ export default function SelectionScreen({
   onEvaluate
 }: SelectionProps) {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="pitch-bg border-b border-slate-900 px-8 py-6">
-        <div className="mx-auto flex max-w-6xl items-center justify-between">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="pitch-bg border-b border-slate-200 px-4 py-5 md:px-8">
+        <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-emerald-400">
-              Trade Analyzer
-            </p>
-            <h1 className="text-3xl font-semibold">Fanta-Analyst Pro</h1>
-            <p className="text-sm text-slate-300">
-              Build both sides of a trade and evaluate season & next-3 value.
+            <div className="flex items-center gap-3 text-emerald-600">
+              <Shield className="h-6 w-6" />
+              <p className="text-xs uppercase tracking-[0.3em]">Analisi scambi</p>
+            </div>
+            <h1 className="text-3xl font-semibold text-slate-900">Fanta-Analyst Pro</h1>
+            <p className="text-sm text-slate-600">
+              Costruisci i due lati dello scambio e confronta valore stagione e prossime 3.
             </p>
           </div>
           <button
@@ -118,14 +124,14 @@ export default function SelectionScreen({
             onClick={onEvaluate}
           >
             <ArrowRightLeft className="h-5 w-5" />
-            {loading ? "Evaluating..." : "Evaluate trade"}
+            {loading ? "Valutazione in corso..." : "Valuta scambio"}
           </button>
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-6 py-10 lg:grid-cols-2">
+      <main className="mx-auto grid max-w-screen-2xl gap-6 px-4 py-8 md:px-8 lg:grid-cols-2">
         <SidePanel
-          label="Left Side"
+          label="Lato sinistro"
           side="left"
           players={left}
           onAdd={onAdd}
@@ -133,7 +139,7 @@ export default function SelectionScreen({
           onChange={onChange}
         />
         <SidePanel
-          label="Right Side"
+          label="Lato destro"
           side="right"
           players={right}
           onAdd={onAdd}
@@ -143,7 +149,7 @@ export default function SelectionScreen({
       </main>
 
       {errors.length > 0 && (
-        <div className="mx-auto max-w-6xl px-6 pb-6">
+        <div className="mx-auto max-w-screen-2xl px-4 pb-6 md:px-8">
           <div className="alert space-y-1">
             {errors.map((error, index) => (
               <p key={`err-${index}`}>{error}</p>

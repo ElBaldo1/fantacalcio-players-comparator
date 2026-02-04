@@ -5,15 +5,15 @@ export default function TradeTotalsChart({ totals }: { totals: Totals }) {
   const data = [
     {
       type: "bar",
-      x: ["Left", "Right"],
+      x: ["Sinistra", "Destra"],
       y: [totals.season.left, totals.season.right],
-      name: "Season"
+      name: "Stagione"
     },
     {
       type: "bar",
-      x: ["Left", "Right"],
+      x: ["Sinistra", "Destra"],
       y: [totals.next3.left, totals.next3.right],
-      name: "Next 3"
+      name: "Prossime 3"
     }
   ];
 
@@ -21,12 +21,14 @@ export default function TradeTotalsChart({ totals }: { totals: Totals }) {
     <Plot
       data={data}
       layout={{
-        title: "Trade Value Totals",
+        title: "Totali valore scambio",
         barmode: "group",
         margin: { t: 40, l: 50, r: 20, b: 40 },
         paper_bgcolor: "rgba(0,0,0,0)",
         plot_bgcolor: "rgba(0,0,0,0)",
+        xaxis: { title: "Lato" },
         yaxis: {
+          title: "Valore",
           tickmode: "linear",
           dtick: 10,
           tick0: 0
