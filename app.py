@@ -12,6 +12,38 @@ import streamlit as st
 from bs4 import BeautifulSoup
 
 
+ROLE_WEIGHTS = {
+    "GK": {
+        "Avg Voto": 0.45,
+        "Consistency": 0.25,
+        "Availability": 0.20,
+        "Recent Trend": 0.10,
+        "Bonus Impact": 0.00,
+    },
+    "DEF": {
+        "Avg Voto": 0.35,
+        "Bonus Impact": 0.15,
+        "Consistency": 0.25,
+        "Recent Trend": 0.10,
+        "Availability": 0.15,
+    },
+    "MID": {
+        "Avg Voto": 0.30,
+        "Bonus Impact": 0.30,
+        "Consistency": 0.15,
+        "Recent Trend": 0.15,
+        "Availability": 0.10,
+    },
+    "FWD": {
+        "Avg Voto": 0.25,
+        "Bonus Impact": 0.40,
+        "Consistency": 0.10,
+        "Recent Trend": 0.15,
+        "Availability": 0.10,
+    },
+}
+
+
 class FantacalcioScraper:
     """Scrape match stats from a Fantacalcio player page."""
 
@@ -53,7 +85,6 @@ class FantacalcioScraper:
         for col in columns:
             norm = self._normalize_col(col)
             if "giornata" in norm:
-                # Some tables have two columns under "Giornata" (matchday + match info).
                 if giornata_assigned == 0:
                     mapping[col] = "giornata"
                 else:
@@ -179,6 +210,7 @@ class FantacalcioScraper:
         for key in ("giornata", "voto", "fv"):
             if key in df.columns:
                 df = self._coalesce_duplicate_column(df, key)
+
         if "giornata" not in df.columns:
             raise ValueError(
                 "Missing 'Giornata' column in stats table. "
@@ -245,7 +277,81 @@ def scale_trend(value: float, low: float = -1.0, high: float = 1.0) -> float:
     return 100.0 * (clipped - low) / (high - low)
 
 
-def calculate_player_score(df: pd.DataFrame) -> Tuple[float, Dict[str, float], Dict[str, Any]]:
+def get_role_weights(role: str) -> Dict[str, float]:
+    return ROLE_WEIGHTS.get(role, ROLE_WEIGHTS["MID"]).copy()
+
+
+def adjust_weights_for_unreliable(weights: Dict[str, float], fv_unreliable: bool) -> Dict[str, float]:
+    adjusted = weights.copy()
+    if fv_unreliable:
+        original_bonus = adjusted.get("Bonus Impact", 0.0)
+        capped = min(original_bonus, 0.05)
+        diff = original_bonus - capped
+        adjusted["Bonus Impact"] = capped
+        if diff > 0:
+            other_keys = [k for k in adjusted.keys() if k != "Bonus Impact"]
+            base = sum(adjusted[k] for k in other_keys)
+            if base > 0:
+                for k in other_keys:
+                    adjusted[k] += diff * (adjusted[k] / base)
+    total = sum(adjusted.values())
+    if total > 0:
+        for k in list(adjusted.keys()):
+            adjusted[k] /= total
+    return adjusted
+
+
+def weighted_moving_average(values: list) -> Tuple[float, list]:
+    if not values:
+        return float("nan"), []
+    n = len(values)
+    weights = list(range(1, n + 1))
+    weight_sum = sum(weights)
+    prediction = sum(v * w for v, w in zip(values, weights)) / weight_sum
+    return prediction, weights
+
+
+def compute_prediction(df: pd.DataFrame) -> Dict[str, Any]:
+    fv_series = df["fv"].dropna()
+    matches_n = int(fv_series.shape[0])
+
+    if matches_n == 0:
+        return {
+            "predicted_fv": float("nan"),
+            "range_low": float("nan"),
+            "range_high": float("nan"),
+            "p_big_game": float("nan"),
+            "p_bad_game": float("nan"),
+            "low_confidence": True,
+            "debug": {"last_values": [], "weights": [], "std_fv": float("nan")},
+        }
+
+    last_values = fv_series.tail(5).to_list()
+    prediction, weights = weighted_moving_average(last_values)
+
+    std_fv = float(fv_series.std()) if matches_n > 0 else float("nan")
+    std_fv = max(std_fv, 0.15) if not np.isnan(std_fv) else float("nan")
+
+    range_low = prediction - 0.84 * std_fv
+    range_high = prediction + 0.84 * std_fv
+
+    p_big_game = float((fv_series >= 7.0).mean()) if matches_n > 0 else float("nan")
+    p_bad_game = float((fv_series < 6.0).mean()) if matches_n > 0 else float("nan")
+
+    return {
+        "predicted_fv": prediction,
+        "range_low": range_low,
+        "range_high": range_high,
+        "p_big_game": p_big_game,
+        "p_bad_game": p_bad_game,
+        "low_confidence": matches_n < 8,
+        "debug": {"last_values": last_values, "weights": weights, "std_fv": std_fv},
+    }
+
+
+def calculate_player_score(
+    df: pd.DataFrame, role: str
+) -> Tuple[float, Dict[str, float], Dict[str, Any]]:
     fv_series = df["fv"]
     voto_series = df["voto"]
 
@@ -283,23 +389,8 @@ def calculate_player_score(df: pd.DataFrame) -> Tuple[float, Dict[str, float], D
         "Availability": scale_positive(availability_ratio, 0.0, 1.0),
     }
 
-    weights = {
-        "Avg Voto": 0.35,
-        "Bonus Impact": 0.30,
-        "Consistency": 0.20,
-        "Recent Trend": 0.10,
-        "Availability": 0.05,
-    }
-
-    if fv_unreliable:
-        weights["Bonus Impact"] = 0.05
-        remaining = 1.0 - weights["Bonus Impact"]
-        base = weights["Avg Voto"] + weights["Consistency"] + weights["Recent Trend"] + weights["Availability"]
-        factor = remaining / base if base > 0 else 1.0
-        weights["Avg Voto"] *= factor
-        weights["Consistency"] *= factor
-        weights["Recent Trend"] *= factor
-        weights["Availability"] *= factor
+    base_weights = get_role_weights(role)
+    weights = adjust_weights_for_unreliable(base_weights, fv_unreliable)
 
     valid_items = {k: v for k, v in components.items() if not np.isnan(v)}
     if valid_items:
@@ -328,6 +419,8 @@ def calculate_player_score(df: pd.DataFrame) -> Tuple[float, Dict[str, float], D
         "reliability": reliability,
         "weighted_sum": weighted_sum,
         "weights": weights,
+        "base_weights": base_weights,
+        "role": role,
     }
 
     return final_score, components, debug
@@ -340,7 +433,7 @@ def format_metric(value: float, digits: int = 2, signed: bool = False) -> str:
     return fmt.format(value)
 
 
-def build_player_profile(name: str, df: pd.DataFrame) -> Dict[str, Any]:
+def build_player_profile(name: str, df: pd.DataFrame, role: str) -> Dict[str, Any]:
     avg_voto = safe_mean(df["voto"])
     avg_fv = safe_mean(df["fv"])
     bonus_impact = safe_mean(df["fv"] - df["voto"])
@@ -354,7 +447,8 @@ def build_player_profile(name: str, df: pd.DataFrame) -> Dict[str, Any]:
     max_matchday = int(df["giornata"].dropna().max()) if df["giornata"].dropna().size > 0 else 0
     availability_ratio = matches_n / max(1, max_matchday) if matches_n > 0 else float("nan")
 
-    final_score, components, debug = calculate_player_score(df)
+    prediction = compute_prediction(df)
+    final_score, components, debug = calculate_player_score(df, role)
 
     return {
         "name": name,
@@ -369,6 +463,7 @@ def build_player_profile(name: str, df: pd.DataFrame) -> Dict[str, Any]:
         "final_score": final_score,
         "components": components,
         "debug": debug,
+        "prediction": prediction,
     }
 
 
@@ -376,6 +471,31 @@ def build_player_profile(name: str, df: pd.DataFrame) -> Dict[str, Any]:
 def fetch_player(url: str) -> Tuple[str, pd.DataFrame]:
     name, df, _ = FantacalcioScraper(url).fetch()
     return name, df
+
+
+def render_prediction(profile: Dict[str, Any]) -> None:
+    prediction = profile["prediction"]
+    predicted = prediction["predicted_fv"]
+    avg_fv = profile["avg_fv"]
+
+    st.markdown("#### Prediction")
+    st.metric(
+        "Predicted FV (next)",
+        format_metric(predicted, digits=2),
+        format_metric(predicted - avg_fv, digits=2, signed=True),
+    )
+    range_text = (
+        f"60% range: [{format_metric(prediction['range_low'], digits=2)}, "
+        f"{format_metric(prediction['range_high'], digits=2)}]"
+    )
+    st.write(range_text)
+    st.write(
+        f"P(FV >= 7.0): {format_metric(prediction['p_big_game'] * 100, digits=1)}% | "
+        f"P(FV < 6.0): {format_metric(prediction['p_bad_game'] * 100, digits=1)}%"
+    )
+    st.caption("Context-free estimate based on recent form and historical variance.")
+    if prediction["low_confidence"]:
+        st.warning("Prediction is low confidence due to limited matches.")
 
 
 def render_player_card(profile: Dict[str, Any], other_score: float) -> None:
@@ -397,6 +517,8 @@ def render_player_card(profile: Dict[str, Any], other_score: float) -> None:
     with m3:
         st.metric("Matches", f"{profile['matches_n']}")
         st.metric("Availability", format_metric(profile["availability"], digits=2))
+
+    render_prediction(profile)
 
 
 def build_radar_chart(p1: Dict[str, Any], p2: Dict[str, Any]) -> go.Figure:
@@ -491,7 +613,34 @@ def run_self_test() -> None:
     assert scale_inverted(0.2, 0.2, 2.0) == 100.0
     assert scale_inverted(2.0, 0.2, 2.0) == 0.0
 
-    final_score, components, debug = calculate_player_score(df)
+    pred, weights = weighted_moving_average([5, 6, 7, 8, 9])
+    assert weights == [1, 2, 3, 4, 5]
+    assert abs(pred - (115 / 15)) < 1e-6
+
+    probs_df = pd.DataFrame(
+        {
+            "giornata": [1, 2, 3, 4],
+            "voto": [5.0, 6.0, 7.0, 8.0],
+            "fv": [5.0, 6.0, 7.0, 8.0],
+        }
+    )
+    prediction = compute_prediction(probs_df)
+    assert abs(prediction["p_big_game"] - 0.5) < 1e-6
+    assert abs(prediction["p_bad_game"] - 0.25) < 1e-6
+
+    unreliable_df = pd.DataFrame(
+        {
+            "giornata": [1, 2, 3, 4],
+            "voto": [6.0, 6.0, 6.0, 6.0],
+            "fv": [6.0, 6.0, 6.0, 6.0],
+        }
+    )
+    _, _, debug = calculate_player_score(unreliable_df, "MID")
+    assert debug["fv_unreliable"] is True
+    assert debug["weights"]["Bonus Impact"] <= 0.05 + 1e-9
+    assert abs(sum(debug["weights"].values()) - 1.0) < 1e-6
+
+    final_score, components, debug = calculate_player_score(df, "MID")
     assert 0.0 <= final_score <= 100.0
     assert all(0.0 <= v <= 100.0 for v in components.values() if not np.isnan(v))
     assert debug["matches_n"] == 5
@@ -506,6 +655,7 @@ def main() -> None:
     st.sidebar.write(
         "Paste two player URLs from fantacalcio.it to compare ratings, trends, and availability."
     )
+    role = st.sidebar.selectbox("Role", ["GK", "DEF", "MID", "FWD"], index=2)
     url1 = st.sidebar.text_input("Player 1 URL")
     url2 = st.sidebar.text_input("Player 2 URL")
     show_debug = st.sidebar.checkbox("Show debug details")
@@ -529,8 +679,8 @@ def main() -> None:
             st.error("No usable match data found after cleaning. Please verify the URLs.")
             return
 
-        p1 = build_player_profile(name1, df1)
-        p2 = build_player_profile(name2, df2)
+        p1 = build_player_profile(name1, df1, role)
+        p2 = build_player_profile(name2, df2, role)
 
         col1, col2 = st.columns(2)
         with col1:
@@ -572,7 +722,12 @@ def main() -> None:
 
         if show_debug:
             with st.expander("Debug details"):
-                st.write({"player1": p1["debug"], "player2": p2["debug"]})
+                st.write(
+                    {
+                        "player1": {**p1["debug"], "prediction": p1["prediction"]["debug"]},
+                        "player2": {**p2["debug"], "prediction": p2["prediction"]["debug"]},
+                    }
+                )
 
 
 if __name__ == "__main__":
