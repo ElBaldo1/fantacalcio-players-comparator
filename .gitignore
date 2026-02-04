@@ -1,0 +1,48 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyd
+*.pyo
+*.so
+.Python
+pip-wheel-metadata/
+*.egg-info/
+.eggs/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.pytype/
+.pyre/
+.coverage
+coverage.xml
+htmlcov/
+
+# React / Node / npm
+node_modules/
+.pnp/
+.pnp.js
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# React build outputs
+build/
+dist/
+
+# Vite / CRA / Next caches
+.vite/
+.eslintcache
+.cache/
+.next/
+out/
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
