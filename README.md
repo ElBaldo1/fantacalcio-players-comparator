@@ -76,7 +76,7 @@ VITE_API_URL=http://localhost:8000 npm run dev
 ```
 
 ### Validità scambio
-Lo scambio è valido solo se **il numero di giocatori è uguale** tra i due lati e **i ruoli coincidono** (GK/DEF/MID/FWD).
+Lo scambio è valido solo se **il numero di giocatori è uguale** tra i due lati e **i ruoli coincidono** (POR/DF/CC/ATT).
 
 ### Note
 - I grafici usano intervalli fissi sull'asse Y (0.5 per FV e 10 per gli score 0-100).
