@@ -1,6 +1,6 @@
-# Fanta-Analyst Pro
+# Fanta-Analyst Trade Analyzer
 
-Full-stack Fantacalcio player comparison with a FastAPI backend and React (Vite) frontend.
+Full-stack trade analyzer for Fantacalcio players. The backend scrapes match stats and scores players; the frontend compares two trade sides and renders verdicts and charts.
 
 ## File Tree
 ```
@@ -8,63 +8,55 @@ backend/
   main.py
   scraper.py
   scoring.py
-  test_compare.py
+  test_trade.py
   requirements.txt
 frontend/
   index.html
   package.json
+  postcss.config.cjs
+  tailwind.config.js
   tsconfig.json
   vite.config.ts
   src/
     App.tsx
     index.css
     main.tsx
-app.py
-README.md
-pyproject.toml
+    types.ts
+    components/
+      SelectionScreen.tsx
+      ResultsScreen.tsx
+      charts/
+        TradeTotalsChart.tsx
+        PlayerValueChart.tsx
+        PlayerTrendChart.tsx
 ```
 
 ## Backend (FastAPI)
-### Install
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements.txt
-```
-
-### Run
-```bash
 uvicorn backend.main:app --reload --port 8000
 ```
 
-### Test Script
+Test script:
 ```bash
-python backend/test_compare.py
-```
-
-You can override URLs and API endpoint:
-```bash
-API_URL=http://localhost:8000 URL1=<url1> URL2=<url2> python backend/test_compare.py
+python backend/test_trade.py
 ```
 
 ## Frontend (React + Vite)
-### Install
 ```bash
 cd frontend
 npm install
-```
-
-### Run
-```bash
 npm run dev
 ```
 
-Optional API URL override:
+Optional API override:
 ```bash
 VITE_API_URL=http://localhost:8000 npm run dev
 ```
 
 ## Notes
-- The backend uses requests + BeautifulSoup + pandas.read_html for scraping.
-- If the page structure changes or the table is missing, the API returns a 422 error.
-- Goal involvement uses goals+assists if available; otherwise a bonus/malus proxy per match.
+- Charts use fixed y-axis tick intervals (0.5 for FV-related charts and 10 for 0-100 scores).
+- Backend validates trade constraints (same number of players and role counts).
+- Trade value uses season and next-3 horizons with explicit formulas.

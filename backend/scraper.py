@@ -1,4 +1,5 @@
 import re
+from io import StringIO
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
@@ -35,29 +36,81 @@ class FantacalcioScraper:
             return np.nan
 
     @staticmethod
-    def _normalize_col(name: str) -> str:
-        return re.sub(r"\s+", " ", str(name).strip().lower())
+    def _normalize_col(name: Any) -> str:
+        text = str(name).lower().strip()
+        text = text.replace(".", "")
+        text = re.sub(r"\s+", " ", text)
+        return text
+
+    def _map_columns(self, columns: list) -> Dict[str, str]:
+        """Map detected column names to standardized keys."""
+        mapping = {}
+        giornata_assigned = 0
+        for col in columns:
+            norm = self._normalize_col(col)
+            if "giornata" in norm:
+                if giornata_assigned == 0:
+                    mapping[col] = "giornata"
+                else:
+                    mapping[col] = "match_info"
+                giornata_assigned += 1
+            elif norm in {"voto", "voti"}:
+                mapping[col] = "voto"
+            elif norm in {"fv", "f v", "f v ", "fv ", "fantavoto", "fanta voto", "fanta-voto"}:
+                mapping[col] = "fv"
+            elif "bonus" in norm and "malus" in norm:
+                mapping[col] = "bonus_malus"
+        return mapping
+
+    @staticmethod
+    def _coalesce_duplicate_column(df: pd.DataFrame, colname: str) -> pd.DataFrame:
+        """
+        If duplicate columns exist (same name), keep the column with the most
+        numeric values and drop the others.
+        """
+        cols = df.loc[:, df.columns == colname]
+        if cols.shape[1] <= 1:
+            return df
+        best_series = None
+        best_count = -1
+        for i in range(cols.shape[1]):
+            series = pd.to_numeric(cols.iloc[:, i], errors="coerce")
+            count = int(series.notna().sum())
+            if count > best_count:
+                best_count = count
+                best_series = series
+        df = df.drop(columns=[colname])
+        df[colname] = best_series
+        return df
 
     def _find_stats_table(self, soup: BeautifulSoup) -> Optional[pd.DataFrame]:
         """
         Find the match stats table by searching for columns like
-        'Giornata' and 'Voto'.
+        'Giornata' and 'Voto' or variants.
         """
         for table in soup.find_all("table"):
             try:
-                df = pd.read_html(str(table))[0]
+                df = pd.read_html(StringIO(str(table)))[0]
             except Exception:
                 continue
-            cols_norm = [self._normalize_col(c) for c in df.columns]
-            if "giornata" in cols_norm and "voto" in cols_norm:
-                df.columns = cols_norm
+            mapping = self._map_columns(list(df.columns))
+            if "giornata" in mapping.values() and "voto" in mapping.values():
+                df = df.rename(columns=mapping)
                 return df
         return None
+
+    @staticmethod
+    def _extract_player_name(soup: BeautifulSoup) -> str:
+        h1 = soup.find("h1")
+        if h1 and h1.text.strip():
+            return h1.text.strip()
+        title = soup.title.text.strip() if soup.title else "Player"
+        return title.split("-")[0].strip() if "-" in title else title
 
     def _extract_stats_from_html(self, soup: BeautifulSoup) -> Optional[pd.DataFrame]:
         """
         Fallback parser for pages where vote values are stored in data-value
-        attributes (e.g., <span class=\"grade\" data-value=\"6\">).
+        attributes (e.g., <span class="grade" data-value="6">).
         """
         table = soup.find("table", class_="player-summary-table")
         if table is None:
@@ -94,63 +147,49 @@ class FantacalcioScraper:
             return None
         return pd.DataFrame(rows)
 
-    @staticmethod
-    def _extract_player_name(soup: BeautifulSoup) -> str:
-        h1 = soup.find("h1")
-        if h1 and h1.text.strip():
-            return h1.text.strip()
-        title = soup.title.text.strip() if soup.title else "Player"
-        return title.split("-")[0].strip() if "-" in title else title
-
-    @staticmethod
-    def _extract_optional_stats(soup: BeautifulSoup) -> Dict[str, Optional[int]]:
-        """
-        Try to extract goals/assists from page text using regex.
-        If not found, return None values.
-        """
-        text = soup.get_text(" ", strip=True).lower()
-        stats: Dict[str, Optional[int]] = {"gol": None, "assist": None}
-        for key in ["gol", "assist"]:
-            match = re.search(rf"{key}\s+(\d+)", text)
-            if match:
-                stats[key] = int(match.group(1))
-        return stats
-
-    def fetch(self) -> Tuple[str, pd.DataFrame, Dict[str, Optional[int]]]:
+    def fetch(self) -> Tuple[str, pd.DataFrame]:
         headers = {"User-Agent": self.USER_AGENT}
         try:
             response = requests.get(self.url, headers=headers, timeout=15)
             response.raise_for_status()
         except requests.RequestException as exc:
-            raise ValueError("Unable to fetch the player page. Check the URL.") from exc
+            raise ValueError(
+                f"Unable to fetch the player page. Check the URL and connectivity. URL: {self.url}"
+            ) from exc
 
         soup = BeautifulSoup(response.text, "html.parser")
 
         player_name = self._extract_player_name(soup)
         stats_table = self._find_stats_table(soup)
         if stats_table is None:
+            stats_table = self._extract_stats_from_html(soup)
+
+        if stats_table is None:
             raise ValueError(
-                "Stats table not found. The page may have changed or the URL is wrong."
+                "Stats table not found. The page may have changed or the URL is wrong. "
+                f"URL: {self.url}"
             )
 
         df = stats_table.copy()
-        col_map = {
-            "giornata": "giornata",
-            "voto": "voto",
-            "fv": "fv",
-            "fantavoto": "fv",
-            "fanta voto": "fv",
-            "bonus/malus": "bonus_malus",
-            "bonus malus": "bonus_malus",
-        }
-        df = df.rename(columns={c: col_map.get(c, c) for c in df.columns})
+        for key in ("giornata", "voto", "fv"):
+            if key in df.columns:
+                df = self._coalesce_duplicate_column(df, key)
 
         if "giornata" not in df.columns:
-            raise ValueError("Missing 'Giornata' column in stats table.")
+            raise ValueError(
+                "Missing 'Giornata' column in stats table. "
+                f"Found columns: {list(df.columns)}. URL: {self.url}"
+            )
         if "voto" not in df.columns:
-            raise ValueError("Missing 'Voto' column in stats table.")
+            raise ValueError(
+                "Missing 'Voto' column in stats table. "
+                f"Found columns: {list(df.columns)}. URL: {self.url}"
+            )
         if "fv" not in df.columns:
-            raise ValueError("Missing 'FV' column in stats table.")
+            raise ValueError(
+                "Missing 'FV' column in stats table. "
+                f"Found columns: {list(df.columns)}. URL: {self.url}"
+            )
 
         df["giornata"] = pd.to_numeric(df["giornata"], errors="coerce")
         df["voto"] = df["voto"].apply(self._to_float)
@@ -164,7 +203,10 @@ class FantacalcioScraper:
                 df["voto"] = df["voto"].apply(self._to_float)
                 df["fv"] = df["fv"].apply(self._to_float)
 
-        df = df.dropna(subset=["voto", "fv"], how="all").sort_values("giornata")
+        if df["voto"].dropna().empty and df["fv"].dropna().empty:
+            raise ValueError(
+                "No usable match rows after cleaning. The table exists but FV/Voto are empty. "
+                f"URL: {self.url}"
+            )
 
-        optional_stats = self._extract_optional_stats(soup)
-        return player_name, df, optional_stats
+        return player_name, df

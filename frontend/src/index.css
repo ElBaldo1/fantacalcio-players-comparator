@@ -1,196 +1,60 @@
-:root {
-  font-family: "Inter", "Segoe UI", system-ui, sans-serif;
-  color: #0f172a;
-  background-color: #f8fafc;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-* {
-  box-sizing: border-box;
+:root {
+  color-scheme: dark;
 }
 
 body {
-  margin: 0;
-  min-height: 100vh;
-  background: #f8fafc;
+  font-family: "Inter", system-ui, sans-serif;
 }
 
-.app {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 32px 24px 48px;
-}
-
-.header {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  margin-bottom: 24px;
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 24px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-}
-
-.header h1 {
-  margin: 0 0 8px;
-  font-size: 32px;
-}
-
-.header p {
-  margin: 0;
-  color: #475569;
-}
-
-.inputs {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-  align-items: end;
-}
-
-.inputs label {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  font-size: 14px;
-  color: #334155;
-}
-
-.inputs input {
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid #cbd5f5;
-  font-size: 14px;
-}
-
-.inputs button {
-  padding: 12px 16px;
-  background: #1d4ed8;
-  color: #ffffff;
-  border: none;
-  border-radius: 10px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.inputs button:disabled {
-  background: #94a3b8;
-  cursor: not-allowed;
-}
-
-.alert {
-  padding: 12px 16px;
-  border-radius: 12px;
-  margin-bottom: 16px;
-}
-
-.alert.error {
-  background: #fee2e2;
-  color: #b91c1c;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+.pitch-bg {
+  background-image: radial-gradient(circle at top, rgba(34, 197, 94, 0.15), transparent 55%),
+    linear-gradient(180deg, rgba(22, 163, 74, 0.15), transparent 50%);
 }
 
 .card {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  @apply rounded-2xl border border-slate-800 bg-slate-900/70 shadow-lg;
 }
 
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
+.table-cell {
+  @apply px-3 py-2 text-sm text-slate-200;
 }
 
-.card-header h2 {
-  margin: 0;
-  font-size: 20px;
+.table-head {
+  @apply px-3 py-2 text-xs uppercase tracking-widest text-slate-400;
 }
 
-.score {
-  text-align: right;
-  color: #1d4ed8;
+.badge-left {
+  @apply rounded-full bg-left/20 px-2 py-1 text-xs font-semibold text-left;
 }
 
-.score strong {
-  display: block;
-  font-size: 24px;
+.badge-right {
+  @apply rounded-full bg-right/20 px-2 py-1 text-xs font-semibold text-right;
 }
 
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
+.button-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 font-semibold text-slate-900 hover:bg-emerald-400;
 }
 
-.metrics div {
-  background: #f1f5f9;
-  padding: 12px;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.button-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:bg-slate-800;
 }
 
-.metrics span {
-  font-size: 12px;
-  color: #64748b;
+.input {
+  @apply w-full rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100;
 }
 
-.metrics strong {
-  font-size: 16px;
+.select {
+  @apply w-full rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-100;
 }
 
-.charts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+.alert {
+  @apply rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200;
 }
 
-.chart-card {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 16px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
-  min-height: 360px;
-}
-
-.chart-card h3 {
-  margin: 0 0 8px;
-}
-
-.verdict {
-  background: #0f172a;
-  color: #f8fafc;
-  padding: 20px;
-  border-radius: 16px;
-}
-
-.verdict h3 {
-  margin: 0 0 8px;
-}
-
-.empty {
-  padding: 24px;
-  background: #e2e8f0;
-  border-radius: 12px;
-  color: #475569;
-}
-
-@media (max-width: 720px) {
-  .header {
-    padding: 20px;
-  }
-  .metrics {
-    grid-template-columns: 1fr 1fr;
-  }
+.skeleton {
+  @apply animate-pulse rounded-xl bg-slate-800/70;
 }
