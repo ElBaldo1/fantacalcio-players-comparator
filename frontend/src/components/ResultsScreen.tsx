@@ -3,6 +3,8 @@ import { useMemo, useState } from "react";
 import type { TradeResponse } from "../types";
 import TradeTotalsChart from "./charts/TradeTotalsChart";
 import PlayerTrendChart from "./charts/PlayerTrendChart";
+import HistoricalTrajectoryChart from "./charts/HistoricalTrajectoryChart";
+import FVMComparisonChart from "./charts/FVMComparisonChart";
 
 const roleLabels: Record<string, string> = {
   GK: "Portiere",
@@ -10,6 +12,35 @@ const roleLabels: Record<string, string> = {
   MID: "Centrocampista",
   FWD: "Attaccante"
 };
+
+function TrajectoryBadge({ direction, modifier }: { direction: string; modifier: number }) {
+  const config: Record<string, { label: string; color: string; arrow: string }> = {
+    improving: {
+      label: "In crescita",
+      color: "text-emerald-700 bg-emerald-50 border-emerald-200",
+      arrow: "\u2197"
+    },
+    declining: {
+      label: "In calo",
+      color: "text-rose-700 bg-rose-50 border-rose-200",
+      arrow: "\u2198"
+    },
+    stable: {
+      label: "Stabile",
+      color: "text-slate-600 bg-slate-50 border-slate-200",
+      arrow: "\u2192"
+    }
+  };
+  const c = config[direction] ?? config.stable;
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-semibold ${c.color}`}
+    >
+      {c.arrow} {c.label} ({modifier > 0 ? "+" : ""}
+      {modifier.toFixed(1)})
+    </span>
+  );
+}
 
 function Table({ players, side }: { players: TradeResponse["left"]; side: "left" | "right" }) {
   const headers = [
@@ -19,15 +50,19 @@ function Table({ players, side }: { players: TradeResponse["left"]; side: "left"
     { label: "Valore Stagione", className: "whitespace-nowrap" },
     { label: "Voto medio", className: "whitespace-nowrap" },
     { label: "FV medio", className: "whitespace-nowrap" },
+    { label: "Quotaz.", className: "whitespace-nowrap" },
+    { label: "FVM", className: "whitespace-nowrap" },
+    { label: "Effic. Valore", className: "whitespace-nowrap" },
     { label: "Copertura (%)", className: "whitespace-nowrap" },
-    { label: "Std FV", className: "whitespace-nowrap" }
+    { label: "Std FV", className: "whitespace-nowrap" },
+    { label: "Traiettoria", className: "whitespace-nowrap" }
   ];
   const badgeClass = side === "left" ? "badge-left" : "badge-right";
   const badgeLabel = side === "left" ? "Sinistra" : "Destra";
   return (
     <div className="card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="min-w-[760px] w-full">
+        <table className="min-w-[1000px] w-full">
           <thead>
             <tr className="bg-slate-100 text-left">
               {headers.map((head) => (
@@ -38,23 +73,44 @@ function Table({ players, side }: { players: TradeResponse["left"]; side: "left"
             </tr>
           </thead>
           <tbody>
-            {players.map((player) => (
-              <tr key={player.name} className="border-t border-slate-200">
-                <td className="table-cell">
-                  <div className="flex items-center gap-2">
-                    <span className={badgeClass}>{badgeLabel}</span>
-                    <span>{player.name}</span>
-                  </div>
-                </td>
-                <td className="table-cell">{roleLabels[player.role] ?? player.role}</td>
-                <td className="table-cell">{player.final_score.toFixed(1)}</td>
-                <td className="table-cell">{player.season_value.toFixed(1)}</td>
-                <td className="table-cell">{player.avg_voto.toFixed(2)}</td>
-                <td className="table-cell">{player.avg_fv.toFixed(2)}</td>
-                <td className="table-cell">{(player.availability * 100).toFixed(0)}%</td>
-                <td className="table-cell">{player.std_fv.toFixed(2)}</td>
-              </tr>
-            ))}
+            {players.map((player) => {
+              const fmt = (v: number | null | undefined, d = 2) =>
+                v != null ? v.toFixed(d) : "N/D";
+              return (
+                <tr key={player.name} className="border-t border-slate-200">
+                  <td className="table-cell">
+                    <div className="flex items-center gap-2">
+                      <span className={badgeClass}>{badgeLabel}</span>
+                      <span>{player.name}</span>
+                    </div>
+                  </td>
+                  <td className="table-cell">{roleLabels[player.role] ?? player.role}</td>
+                  <td className="table-cell">{fmt(player.final_score, 1)}</td>
+                  <td className="table-cell">{fmt(player.season_value, 1)}</td>
+                  <td className="table-cell">{fmt(player.avg_voto)}</td>
+                  <td className="table-cell">{fmt(player.avg_fv)}</td>
+                  <td className="table-cell">
+                    {player.quotazione_classic != null ? player.quotazione_classic : "N/D"}
+                  </td>
+                  <td className="table-cell font-semibold">
+                    {player.fvm_classic != null ? player.fvm_classic : "N/D"}
+                  </td>
+                  <td className="table-cell">{fmt(player.value_efficiency)}</td>
+                  <td className="table-cell">
+                    {player.availability != null
+                      ? `${(player.availability * 100).toFixed(0)}%`
+                      : "N/D"}
+                  </td>
+                  <td className="table-cell">{fmt(player.std_fv)}</td>
+                  <td className="table-cell">
+                    <TrajectoryBadge
+                      direction={player.trajectory_direction ?? "stable"}
+                      modifier={player.trajectory_modifier ?? 0}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -69,7 +125,8 @@ function VerdictBlock({ title, data }: { title: string; data: TradeResponse["tot
       <p className="text-sm text-emerald-900">{data.verdict}</p>
       <p className="text-sm text-emerald-700">Differenza: {data.delta.toFixed(1)}</p>
       <div className="mt-2 text-xs text-emerald-700">
-        Fattori chiave: {data.drivers.map((d) => `${d.player} (${d.delta.toFixed(1)})`).join(", ") || "N/D"}
+        Fattori chiave:{" "}
+        {data.drivers.map((d) => `${d.player} (${d.delta.toFixed(1)})`).join(", ") || "N/D"}
       </div>
     </div>
   );
@@ -139,24 +196,36 @@ export default function ResultsScreen({
                   <p className="text-sm text-slate-500">{leftLabel}</p>
                   <p className="text-2xl font-semibold">{data.totals.season.left.toFixed(1)}</p>
                   <p className="text-sm text-slate-500">
-                    Media voto {(
+                    Media voto{" "}
+                    {(
                       data.left.reduce((acc, p) => acc + p.avg_voto, 0) / data.left.length
                     ).toFixed(2)}{" "}
-                    · Media FV {(
+                    · Media FV{" "}
+                    {(
                       data.left.reduce((acc, p) => acc + p.avg_fv, 0) / data.left.length
-                    ).toFixed(2)}
+                    ).toFixed(2)}{" "}
+                    · FVM tot.{" "}
+                    {data.left.reduce((acc, p) => acc + (p.fvm_classic ?? 0), 0)}{" "}
+                    · Quotaz. tot.{" "}
+                    {data.left.reduce((acc, p) => acc + (p.quotazione_classic ?? 0), 0)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">{rightLabel}</p>
                   <p className="text-2xl font-semibold">{data.totals.season.right.toFixed(1)}</p>
                   <p className="text-sm text-slate-500">
-                    Media voto {(
+                    Media voto{" "}
+                    {(
                       data.right.reduce((acc, p) => acc + p.avg_voto, 0) / data.right.length
                     ).toFixed(2)}{" "}
-                    · Media FV {(
+                    · Media FV{" "}
+                    {(
                       data.right.reduce((acc, p) => acc + p.avg_fv, 0) / data.right.length
-                    ).toFixed(2)}
+                    ).toFixed(2)}{" "}
+                    · FVM tot.{" "}
+                    {data.right.reduce((acc, p) => acc + (p.fvm_classic ?? 0), 0)}{" "}
+                    · Quotaz. tot.{" "}
+                    {data.right.reduce((acc, p) => acc + (p.quotazione_classic ?? 0), 0)}
                   </p>
                 </div>
               </div>
@@ -208,6 +277,32 @@ export default function ResultsScreen({
                 metric="voto"
                 yTitle="Voto"
               />
+            </div>
+          </div>
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-2">
+          <div className="card flex h-[320px] flex-col p-4">
+            <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
+              <ChartLine className="h-4 w-4 text-emerald-600" />
+              Traiettoria storica — FV medio per stagione
+            </div>
+            <div className="flex-1 min-h-0">
+              <HistoricalTrajectoryChart
+                left={data.left}
+                right={data.right}
+                leftLabel={leftLabel}
+                rightLabel={rightLabel}
+              />
+            </div>
+          </div>
+          <div className="card flex h-[320px] flex-col p-4">
+            <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
+              <ChartLine className="h-4 w-4 text-emerald-600" />
+              Confronto FVM e Quotazione
+            </div>
+            <div className="flex-1 min-h-0">
+              <FVMComparisonChart left={data.left} right={data.right} />
             </div>
           </div>
         </section>

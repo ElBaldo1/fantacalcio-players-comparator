@@ -28,6 +28,12 @@ export type PlayerMetrics = {
   predicted_next3_range60: [number, number];
   p_big_game: number;
   p_bad_game: number;
+  quotazione_classic: number | null;
+  fvm_classic: number | null;
+  value_efficiency: number | null;
+  trajectory_modifier: number;
+  trajectory_direction: "improving" | "declining" | "stable";
+  yoy_avg_fv: number[];
   season_value: number;
   next3_value: number;
   components: Record<string, number>;

@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,7 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-CACHE: Dict[str, tuple] = {}
+CACHE: Dict[str, Dict[str, Any]] = {}
 ROLE_LABELS = {"GK": "Portiere", "DEF": "Difensore", "MID": "Centrocampista", "FWD": "Attaccante"}
 
 
@@ -66,12 +66,12 @@ def validate_trade(left: List[PlayerInput], right: List[PlayerInput]) -> None:
         )
 
 
-def fetch_cached(url: str) -> tuple:
+def fetch_cached(url: str) -> Dict[str, Any]:
     if url in CACHE:
         return CACHE[url]
-    name, df = FantacalcioScraper(url).fetch()
-    CACHE[url] = (name, df)
-    return name, df
+    result = FantacalcioScraper.fetch_multi_season(url)
+    CACHE[url] = result
+    return result
 
 
 def driver_contributions(left: list, right: list, value_key: str) -> List[Dict[str, float]]:
@@ -112,11 +112,27 @@ async def evaluate_trade(payload: TradeRequest) -> Dict[str, object]:
 
     try:
         for p in payload.left:
-            name, df = fetch_cached(str(p.url))
-            left_players.append(build_player_payload(name, df, p.role))
+            data = fetch_cached(str(p.url))
+            current = data["current"]
+            historical_dfs = [h["df"] for h in data.get("history", [])]
+            left_players.append(
+                build_player_payload(
+                    data["name"], current["df"], p.role,
+                    player_stats=current["stats"],
+                    historical_dfs=historical_dfs,
+                )
+            )
         for p in payload.right:
-            name, df = fetch_cached(str(p.url))
-            right_players.append(build_player_payload(name, df, p.role))
+            data = fetch_cached(str(p.url))
+            current = data["current"]
+            historical_dfs = [h["df"] for h in data.get("history", [])]
+            right_players.append(
+                build_player_payload(
+                    data["name"], current["df"], p.role,
+                    player_stats=current["stats"],
+                    historical_dfs=historical_dfs,
+                )
+            )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:

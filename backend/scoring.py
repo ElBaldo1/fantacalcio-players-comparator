@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -8,32 +8,40 @@ from scraper import FantacalcioScraper
 
 ROLE_WEIGHTS = {
     "GK": {
-        "Avg Voto": 0.45,
+        "Avg Voto": 0.38,
         "Bonus Impact": 0.00,
-        "Consistency": 0.25,
-        "Recent Trend": 0.10,
-        "Availability": 0.20,
+        "Consistency": 0.20,
+        "Recent Trend": 0.08,
+        "Availability": 0.17,
+        "FVM": 0.10,
+        "Efficienza Valore": 0.07,
     },
     "DEF": {
-        "Avg Voto": 0.35,
-        "Bonus Impact": 0.15,
-        "Consistency": 0.25,
-        "Recent Trend": 0.10,
-        "Availability": 0.15,
+        "Avg Voto": 0.28,
+        "Bonus Impact": 0.12,
+        "Consistency": 0.20,
+        "Recent Trend": 0.08,
+        "Availability": 0.12,
+        "FVM": 0.12,
+        "Efficienza Valore": 0.08,
     },
     "MID": {
-        "Avg Voto": 0.30,
-        "Bonus Impact": 0.30,
-        "Consistency": 0.15,
-        "Recent Trend": 0.15,
-        "Availability": 0.10,
+        "Avg Voto": 0.24,
+        "Bonus Impact": 0.24,
+        "Consistency": 0.12,
+        "Recent Trend": 0.10,
+        "Availability": 0.08,
+        "FVM": 0.13,
+        "Efficienza Valore": 0.09,
     },
     "FWD": {
-        "Avg Voto": 0.25,
-        "Bonus Impact": 0.40,
-        "Consistency": 0.10,
-        "Recent Trend": 0.15,
-        "Availability": 0.10,
+        "Avg Voto": 0.20,
+        "Bonus Impact": 0.32,
+        "Consistency": 0.08,
+        "Recent Trend": 0.10,
+        "Availability": 0.08,
+        "FVM": 0.13,
+        "Efficienza Valore": 0.09,
     },
 }
 
@@ -165,7 +173,9 @@ def compute_prediction(df: pd.DataFrame) -> Dict[str, Any]:
     }
 
 
-def compute_metrics(df: pd.DataFrame) -> Dict[str, Any]:
+def compute_metrics(
+    df: pd.DataFrame, player_stats: Optional[Dict[str, float]] = None
+) -> Dict[str, Any]:
     fv_series = df["fv"]
     voto_series = df["voto"]
 
@@ -190,6 +200,20 @@ def compute_metrics(df: pd.DataFrame) -> Dict[str, Any]:
     if not paired.empty:
         fv_equals_voto_ratio = float((paired["fv"] - paired["voto"]).abs().lt(0.01).mean())
 
+    quotazione_classic = float("nan")
+    fvm_classic = float("nan")
+    value_efficiency = float("nan")
+
+    if player_stats:
+        quotazione_classic = player_stats.get("quotazione_classic", float("nan"))
+        fvm_classic = player_stats.get("fvm_classic", float("nan"))
+        if (
+            not np.isnan(quotazione_classic)
+            and not np.isnan(fvm_classic)
+            and quotazione_classic > 0
+        ):
+            value_efficiency = fvm_classic / quotazione_classic
+
     return {
         "avg_voto": avg_voto,
         "avg_fv": avg_fv,
@@ -202,6 +226,9 @@ def compute_metrics(df: pd.DataFrame) -> Dict[str, Any]:
         "fv_std": fv_std,
         "fv_equals_voto_ratio": fv_equals_voto_ratio,
         "fv_unreliable": not np.isnan(fv_equals_voto_ratio) and fv_equals_voto_ratio > 0.8,
+        "quotazione_classic": quotazione_classic,
+        "fvm_classic": fvm_classic,
+        "value_efficiency": value_efficiency,
     }
 
 
@@ -212,6 +239,10 @@ def components_from_metrics(metrics: Dict[str, Any]) -> Dict[str, float]:
         "Consistency": scale_inverted(metrics["consistency_raw"], 0.2, 2.0),
         "Recent Trend": scale_trend(metrics["recent_trend_raw"], -1.0, 1.0),
         "Availability": scale_positive(metrics["availability_ratio"], 0.0, 1.0),
+        "FVM": scale_positive(metrics.get("fvm_classic", float("nan")), 1.0, 150.0),
+        "Efficienza Valore": scale_positive(
+            metrics.get("value_efficiency", float("nan")), 1.0, 8.0
+        ),
     }
 
 
@@ -226,10 +257,62 @@ def weighted_score(components: Dict[str, float], weights: Dict[str, float]) -> f
     return sum(valid_items[k] * used_weights[k] for k in valid_items)
 
 
-def calculate_player_score(df: pd.DataFrame, role: str) -> Tuple[float, Dict[str, float], Dict[str, Any]]:
-    full_metrics = compute_metrics(df)
+def compute_historical_trajectory(
+    current_df: pd.DataFrame,
+    historical_dfs: List[pd.DataFrame],
+) -> Dict[str, Any]:
+    """Compute year-over-year trend based on average seasonal FV."""
+    current_avg = safe_mean(current_df["fv"])
+    if np.isnan(current_avg) or not historical_dfs:
+        return {
+            "trajectory_modifier": 0.0,
+            "yoy_avg_fv": [current_avg] if not np.isnan(current_avg) else [],
+            "trajectory_direction": "stable",
+        }
+
+    avgs = [current_avg]
+    for hdf in historical_dfs:
+        avg = safe_mean(hdf["fv"])
+        if not np.isnan(avg):
+            avgs.append(avg)
+
+    if len(avgs) < 2:
+        return {
+            "trajectory_modifier": 0.0,
+            "yoy_avg_fv": avgs,
+            "trajectory_direction": "stable",
+        }
+
+    diffs = []
+    weights = []
+    for i in range(len(avgs) - 1):
+        diffs.append(avgs[i] - avgs[i + 1])
+        weights.append(2 - i)
+
+    weighted_diff = sum(d * w for d, w in zip(diffs, weights)) / sum(weights)
+    modifier = clamp(weighted_diff * 20.0, -10.0, 10.0)
+
+    direction = "stable"
+    if modifier > 2.0:
+        direction = "improving"
+    elif modifier < -2.0:
+        direction = "declining"
+
+    return {
+        "trajectory_modifier": modifier,
+        "yoy_avg_fv": avgs,
+        "trajectory_direction": direction,
+    }
+
+
+def calculate_player_score(
+    df: pd.DataFrame,
+    role: str,
+    player_stats: Optional[Dict[str, float]] = None,
+) -> Tuple[float, Dict[str, float], Dict[str, Any]]:
+    full_metrics = compute_metrics(df, player_stats)
     df_recent = df.dropna(subset=["fv"]).tail(5)
-    recent_metrics = compute_metrics(df_recent) if not df_recent.empty else full_metrics
+    recent_metrics = compute_metrics(df_recent, player_stats) if not df_recent.empty else full_metrics
 
     base_weights = get_role_weights(role)
     weights = adjust_weights_for_unreliable(base_weights, full_metrics["fv_unreliable"])
@@ -258,31 +341,66 @@ def calculate_player_score(df: pd.DataFrame, role: str) -> Tuple[float, Dict[str
     return final_score, components, debug
 
 
-def season_trade_value(final_score: float, availability: float, std_fv: float) -> float:
-    """Season value combines final score, availability bonus, and risk penalty."""
+def season_trade_value(
+    final_score: float,
+    availability: float,
+    std_fv: float,
+    trajectory_modifier: float = 0.0,
+) -> float:
+    """Season value: final score + availability bonus + risk penalty + historical trajectory."""
     value = final_score
     value += 10 * (availability - 0.80)
     value -= 5 * max(0.0, (std_fv - 1.2))
+    value += trajectory_modifier * 0.5
     return clamp(value, 0.0, 100.0)
 
 
-def next3_trade_value(pred_next3: float, availability: float, std_fv: float) -> float:
-    """Next-3 value combines forecast, availability, and higher risk penalty."""
+def next3_trade_value(
+    pred_next3: float,
+    availability: float,
+    std_fv: float,
+    trajectory_modifier: float = 0.0,
+) -> float:
+    """Next-3 value: prediction + availability + risk penalty + historical trajectory."""
     base = scale_positive(pred_next3, 5.0, 7.5)
     value = base
     value += 8 * (availability - 0.80)
     value -= 8 * max(0.0, (std_fv - 1.1))
+    value += trajectory_modifier * 0.3
     return clamp(value, 0.0, 100.0)
 
 
-def build_player_payload(name: str, df: pd.DataFrame, role: str) -> Dict[str, Any]:
-    metrics = compute_metrics(df)
-    prediction = compute_prediction(df)
-    final_score, components, debug = calculate_player_score(df, role)
+def _sanitize(value: Any) -> Any:
+    """Convert NaN to None for clean JSON serialization."""
+    if isinstance(value, float) and np.isnan(value):
+        return None
+    if isinstance(value, dict):
+        return {k: _sanitize(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_sanitize(v) for v in value]
+    return value
 
-    season_value = season_trade_value(final_score, metrics["availability_ratio"], prediction["std_fv"])
-    next3_value = next3_trade_value(
-        prediction["predicted_next3"], metrics["availability_ratio"], prediction["std_fv"]
+
+def build_player_payload(
+    name: str,
+    df: pd.DataFrame,
+    role: str,
+    player_stats: Optional[Dict[str, float]] = None,
+    historical_dfs: Optional[List[pd.DataFrame]] = None,
+) -> Dict[str, Any]:
+    metrics = compute_metrics(df, player_stats)
+    prediction = compute_prediction(df)
+    final_score, components, debug = calculate_player_score(df, role, player_stats)
+
+    trajectory = compute_historical_trajectory(df, historical_dfs or [])
+
+    sv = season_trade_value(
+        final_score, metrics["availability_ratio"], prediction["std_fv"],
+        trajectory["trajectory_modifier"],
+    )
+    n3v = next3_trade_value(
+        prediction["predicted_next3"], metrics["availability_ratio"], prediction["std_fv"],
+        trajectory["trajectory_modifier"],
     )
 
     series = (
@@ -292,7 +410,7 @@ def build_player_payload(name: str, df: pd.DataFrame, role: str) -> Dict[str, An
         .to_dict(orient="records")
     )
 
-    return {
+    payload = {
         "name": name,
         "role": role,
         "avg_voto": metrics["avg_voto"],
@@ -314,9 +432,16 @@ def build_player_payload(name: str, df: pd.DataFrame, role: str) -> Dict[str, An
         ],
         "p_big_game": prediction["p_big_game"],
         "p_bad_game": prediction["p_bad_game"],
-        "season_value": season_value,
-        "next3_value": next3_value,
+        "quotazione_classic": metrics["quotazione_classic"],
+        "fvm_classic": metrics["fvm_classic"],
+        "value_efficiency": metrics["value_efficiency"],
+        "trajectory_modifier": trajectory["trajectory_modifier"],
+        "trajectory_direction": trajectory["trajectory_direction"],
+        "yoy_avg_fv": trajectory["yoy_avg_fv"],
+        "season_value": sv,
+        "next3_value": n3v,
         "components": components,
         "debug": debug,
         "series": series,
     }
+    return _sanitize(payload)

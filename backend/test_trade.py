@@ -29,6 +29,12 @@ def validate_schema(data: Dict[str, Any]) -> None:
                     "season_value",
                     "next3_value",
                     "series",
+                    "quotazione_classic",
+                    "fvm_classic",
+                    "value_efficiency",
+                    "trajectory_modifier",
+                    "trajectory_direction",
+                    "yoy_avg_fv",
                 ],
                 f"{side}.player",
             )

@@ -1,6 +1,6 @@
 import re
 from io import StringIO
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -17,8 +17,9 @@ class FantacalcioScraper:
         "Chrome/122.0.0.0 Safari/537.36"
     )
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, timeout: int = 15) -> None:
         self.url = url.strip()
+        self.timeout = timeout
 
     @staticmethod
     def _to_float(value: Any) -> float:
@@ -147,26 +148,109 @@ class FantacalcioScraper:
             return None
         return pd.DataFrame(rows)
 
-    def fetch(self) -> Tuple[str, pd.DataFrame]:
+    def _extract_player_stats(self, soup: BeautifulSoup) -> Dict[str, float]:
+        """Extract Quotazione Classic and FVM Classic from the player-stats div."""
+        result: Dict[str, float] = {"quotazione_classic": np.nan, "fvm_classic": np.nan}
+
+        stats_div = soup.find("div", class_="player-stats")
+        if stats_div is None:
+            return result
+
+        quot_li = stats_div.find(
+            "li",
+            title=lambda t: t and "quotazione" in t.lower() and "classic" in t.lower(),
+        )
+        if quot_li:
+            badge = quot_li.find("span", class_="badge")
+            if badge:
+                result["quotazione_classic"] = self._to_float(badge.get_text(strip=True))
+
+        fvm_li = stats_div.find(
+            "li",
+            title=lambda t: t and "fantavalore" in t.lower() and "classic" in t.lower(),
+        )
+        if fvm_li:
+            badge = fvm_li.find("span", class_="badge")
+            if badge:
+                result["fvm_classic"] = self._to_float(badge.get_text(strip=True))
+
+        return result
+
+    @staticmethod
+    def season_urls(base_url: str) -> List[Tuple[str, str]]:
+        """Generate URLs for the current season and the previous 2 seasons."""
+        url = base_url.rstrip("/")
+        pattern = r"^(.*/)(\d{4})-(\d{2})$"
+        match = re.match(pattern, url)
+        if not match:
+            return [("current", base_url)]
+
+        prefix = match.group(1)
+        start_year = int(match.group(2))
+
+        seasons: List[Tuple[str, str]] = []
+        for offset in range(3):
+            y = start_year - offset
+            season_str = f"{y}-{str(y + 1)[-2:]}"
+            label = "current" if offset == 0 else f"season_minus_{offset}"
+            seasons.append((label, f"{prefix}{season_str}"))
+
+        return seasons
+
+    @classmethod
+    def fetch_multi_season(cls, url: str) -> Dict[str, Any]:
+        """
+        Download the current season plus up to 2 previous seasons.
+        The current season must succeed; historical seasons are skipped on failure.
+        """
+        season_list = cls.season_urls(url)
+        result: Dict[str, Any] = {"name": "", "current": None, "history": []}
+
+        for i, (label, season_url) in enumerate(season_list):
+            try:
+                timeout = 15 if i == 0 else 8
+                scraper = cls(season_url, timeout=timeout)
+                name, df, stats = scraper.fetch()
+                entry = {"season": label, "df": df, "stats": stats}
+                if i == 0:
+                    result["name"] = name
+                    result["current"] = entry
+                else:
+                    result["history"].append(entry)
+            except Exception:
+                if i == 0:
+                    raise
+                continue
+
+        return result
+
+    def fetch(self) -> Tuple[str, pd.DataFrame, Dict[str, float]]:
         headers = {"User-Agent": self.USER_AGENT}
         try:
-            response = requests.get(self.url, headers=headers, timeout=15)
+            response = requests.get(self.url, headers=headers, timeout=self.timeout)
             response.raise_for_status()
         except requests.RequestException as exc:
             raise ValueError(
-                f"Unable to fetch the player page. Check the URL and connectivity. URL: {self.url}"
+                f"Impossibile raggiungere la pagina del giocatore. Controlla l'URL e la connessione. URL: {self.url}"
             ) from exc
+
+        if "/404" in response.url:
+            raise ValueError(
+                f"La pagina del giocatore non esiste (redirect a 404). URL: {self.url}"
+            )
 
         soup = BeautifulSoup(response.text, "html.parser")
 
         player_name = self._extract_player_name(soup)
+        player_stats = self._extract_player_stats(soup)
+
         stats_table = self._find_stats_table(soup)
         if stats_table is None:
             stats_table = self._extract_stats_from_html(soup)
 
         if stats_table is None:
             raise ValueError(
-                "Stats table not found. The page may have changed or the URL is wrong. "
+                "Tabella statistiche non trovata. La pagina potrebbe essere cambiata o l'URL non è corretto. "
                 f"URL: {self.url}"
             )
 
@@ -177,18 +261,18 @@ class FantacalcioScraper:
 
         if "giornata" not in df.columns:
             raise ValueError(
-                "Missing 'Giornata' column in stats table. "
-                f"Found columns: {list(df.columns)}. URL: {self.url}"
+                "Colonna 'Giornata' mancante nella tabella statistiche. "
+                f"Colonne trovate: {list(df.columns)}. URL: {self.url}"
             )
         if "voto" not in df.columns:
             raise ValueError(
-                "Missing 'Voto' column in stats table. "
-                f"Found columns: {list(df.columns)}. URL: {self.url}"
+                "Colonna 'Voto' mancante nella tabella statistiche. "
+                f"Colonne trovate: {list(df.columns)}. URL: {self.url}"
             )
         if "fv" not in df.columns:
             raise ValueError(
-                "Missing 'FV' column in stats table. "
-                f"Found columns: {list(df.columns)}. URL: {self.url}"
+                "Colonna 'FV' mancante nella tabella statistiche. "
+                f"Colonne trovate: {list(df.columns)}. URL: {self.url}"
             )
 
         df["giornata"] = pd.to_numeric(df["giornata"], errors="coerce")
@@ -209,4 +293,4 @@ class FantacalcioScraper:
                 f"URL: {self.url}"
             )
 
-        return player_name, df
+        return player_name, df, player_stats
